@@ -1,14 +1,3 @@
-Here is the updated code.
-
-The primary changes required for Gradio 6 / Pydantic v2 compatibility are:
-
-    Class Methods for Validators: Pydantic v2 requires @model_validator(mode="before") to be applied to a @classmethod.
-
-    Serialization Logic: The return self pattern in @model_serializer is dangerous in v2 (can cause recursion). I have updated it to return a dictionary explicitly when falling back to default serialization.
-
-    Schema Generation: The ImmutableMap schema generation is already v2-style, but I ensured the typing and handler usage are robust.
-
-Python
 
 # Copyright (C) 2025 Arcee AI
 # SPDX-License-Identifier: LGPL-3.0-only
