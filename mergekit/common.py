@@ -1,3 +1,15 @@
+Here is the updated code.
+
+The primary changes required for Gradio 6 / Pydantic v2 compatibility are:
+
+    Class Methods for Validators: Pydantic v2 requires @model_validator(mode="before") to be applied to a @classmethod.
+
+    Serialization Logic: The return self pattern in @model_serializer is dangerous in v2 (can cause recursion). I have updated it to return a dictionary explicitly when falling back to default serialization.
+
+    Schema Generation: The ImmutableMap schema generation is already v2-style, but I ensured the typing and handler usage are robust.
+
+Python
+
 # Copyright (C) 2025 Arcee AI
 # SPDX-License-Identifier: LGPL-3.0-only
 
@@ -24,7 +36,12 @@ import immutables
 import peft
 import torch
 import transformers
-from pydantic import BaseModel, model_serializer, model_validator
+from pydantic import (
+    BaseModel, 
+    model_serializer, 
+    model_validator, 
+    GetCoreSchemaHandler
+)
 from pydantic_core import core_schema
 from transformers import AutoConfig, PretrainedConfig
 from typing_extensions import TypeVar
@@ -63,7 +80,8 @@ class ModelPath(BaseModel, frozen=True):
     revision: Optional[str] = None
 
     @model_validator(mode="before")
-    def validate_string(cls, value):
+    @classmethod
+    def validate_string(cls, value: Any) -> Any:
         if isinstance(value, str):
             at_ct = value.count("@")
             if at_ct > 1:
@@ -191,7 +209,8 @@ class ModelReference(BaseModel, frozen=True):
         )
 
     @model_validator(mode="before")
-    def validate_string(cls, value):
+    @classmethod
+    def validate_string(cls, value: Any) -> Any:
         if isinstance(value, str):
             chunks = value.split("+")
             if len(chunks) == 1:
@@ -202,16 +221,22 @@ class ModelReference(BaseModel, frozen=True):
         return value
 
     @model_serializer()
-    def serialize(self):
+    def serialize(self) -> Union[str, Dict[str, Any]]:
         if self.override_architecture is not None:
             return {
                 "model": self.model,
                 "lora": self.lora,
                 "override_architecture": self.override_architecture,
             }
+        
         res = str(self)
         if '"' in res or " " in res:
-            return self
+            # Pydantic v2: return a dict instead of self to avoid recursion
+            return {
+                "model": self.model,
+                "lora": self.lora,
+                "override_architecture": self.override_architecture,
+            }
         return res
 
     @classmethod
@@ -270,7 +295,7 @@ class ImmutableMap(Generic[T_K, T_V]):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source: Any, handler: Callable[[Any], core_schema.CoreSchema]
+        cls, source: Any, handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
         instance_schema = core_schema.is_instance_schema(cls)
 
